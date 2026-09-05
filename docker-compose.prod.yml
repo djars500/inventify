@@ -22,8 +22,8 @@ x-logging: &default-logging
 # Образ собирается в GitHub Actions (.github/workflows/build-image.yml) и берётся
 # из ghcr — секции build здесь намеренно нет: собирать на этом сервере нельзя,
 # poetry install уходит в OOM. Чтобы откатиться на конкретный коммит, пропишите
-# в .env: INVENTIFY_IMAGE=ghcr.io/bakdauletbolat/inventify:sha-<полный хеш>
-x-image: &app_image ${INVENTIFY_IMAGE:-ghcr.io/bakdauletbolat/inventify:in-8}
+# в .env: INVENTIFY_IMAGE=ghcr.io/djars500/inventify:sha-<полный хеш>
+x-image: &app_image ${INVENTIFY_IMAGE:-ghcr.io/djars500/inventify:in-8}
 
 services:
   web:

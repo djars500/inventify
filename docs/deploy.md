@@ -7,7 +7,7 @@
 
 - Прод-сервер: `86.107.45.177`, каталог `/opt/inventify`, домен `back-kaynar.kz`
 - Прод-ветка: `in-8`
-- Образ: `ghcr.io/bakdauletbolat/inventify`
+- Образ: `ghcr.io/djars500/inventify`
 - Сборка: `.github/workflows/build-image.yml`
 
 ## Обычный деплой
@@ -52,7 +52,7 @@ free -h
 
 ```bash
 cd /opt/inventify
-echo 'INVENTIFY_IMAGE=ghcr.io/bakdauletbolat/inventify:sha-<хеш>' >> .env
+echo 'INVENTIFY_IMAGE=ghcr.io/djars500/inventify:sha-<хеш>' >> .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
