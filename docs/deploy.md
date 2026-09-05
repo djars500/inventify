@@ -23,6 +23,9 @@ cd /opt/inventify
 make deploy
 ```
 
+Если `make` не найден — в Ubuntu 24.04 его нет из коробки:
+`sudo apt-get update && sudo apt-get install -y make`
+
 `make deploy` делает `git pull`, тянет образ, поднимает контейнеры, применяет
 миграции, собирает статику и чистит мусор. То же самое вручную:
 
