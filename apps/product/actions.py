@@ -82,21 +82,33 @@ class ImportProductAction:
 
     @staticmethod
     def save_image(product):
+        """Перезагружает фотографии товара из Recar.
+
+        Идемпотентна: старые фото заменяются, а не добавляются рядом. Раньше
+        повторный вызов (действие «Импортировать фото» в админке) плодил копии —
+        при AWS_S3_FILE_OVERWRITE=False каждая загрузка создаёт объект с новым
+        именем, и прежний навсегда оставался в бакете.
+
+        Новые файлы сначала целиком готовятся в памяти и только потом заменяют
+        старые: если Recar не ответит на середине, товар не останется без фото.
+        """
         pictures = RecarRequest().get_photos_by_product(product_id=product.id)
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'
         }
+
+        prepared = []
         for product_image in pictures:
             image_url = product_image['host'] + '1024/768/' + product_image['url']
-            response = requests.get(image_url, headers=headers)
+            response = requests.get(image_url, headers=headers, timeout=60)
             image = Image.open(BytesIO(response.content))
 
             if image.mode == 'RGBA':
                 image = image.convert('RGB')
 
             output_io = BytesIO()
-            quality = 70  # Начальная качество
-            max_size = 250 * 1024  # 100 КБ
+            quality = 70  # Начальное качество
+            max_size = 250 * 1024
 
             while True:
                 output_io.truncate(0)
@@ -107,11 +119,18 @@ class ImportProductAction:
                     break
                 quality -= 5  # Уменьшение качества на 5%
 
-            product_image_instance = ProductImage(product=product)
-            product_image_instance.image.save(image_url.split("/")[-1], ContentFile(output_io.getvalue()))
-
-            # Очистка буфера
+            prepared.append((image_url.split("/")[-1], output_io.getvalue()))
             output_io.close()
+
+        if not prepared:
+            return
+
+        # Файлы из хранилища удалит django-cleanup по post_delete
+        product.pictures.all().delete()
+
+        for file_name, content in prepared:
+            product_image_instance = ProductImage(product=product)
+            product_image_instance.image.save(file_name, ContentFile(content))
 
     def run(self, product_data: dict):
         """Совместимость с прежними вызовами: создаёт товар либо обновляет существующий."""

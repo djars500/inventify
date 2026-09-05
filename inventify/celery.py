@@ -69,11 +69,9 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=3, minute=0),
     },
 
-    # Удаление результатов задач из django-celery-results старше CELERY_RESULT_EXPIRES
-    'Очистка результатов celery': {
-        'task': 'celery.backend_cleanup',
-        'schedule': crontab(hour=4, minute=0),
-    },
+    # Задачи 'celery.backend_cleanup' здесь намеренно нет: celery заводит её сам
+    # (Scheduler.install_default_entries) на 4:00, раз задан CELERY_RESULT_EXPIRES.
+    # Своя копия дублировала встроенную, и чистка результатов шла дважды.
 
     'Очистка истёкших сессий': {
         'task': 'base.tasks.clear_expired_sessions',
