@@ -69,8 +69,7 @@ services:
     # max-tasks-per-child=20: воркер перезапускается и отдаёт память после тяжёлых импортов.
     # without-gossip/mingle/heartbeat: не нужны при единственном воркере, экономят память и трафик.
     command: >
-      poetry run celery -A inventify worker --beat
-      --scheduler django
+      poetry run celery -A inventify worker
       --loglevel=warning
       --concurrency=1
       --max-tasks-per-child=20
@@ -80,7 +79,33 @@ services:
       --without-heartbeat
     env_file:
       - .env
-    mem_limit: 400m
+    mem_limit: 280m
+    logging: *default-logging
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Планировщик отдельным контейнером, а не флагом --beat у воркера.
+  # С --beat планировщик живёт дочерним процессом внутри воркера: когда он
+  # падает, воркер этого не замечает и продолжает работать, а расписание
+  # молча встаёт (так пропала ночь с 5 на 6 сентября — процесс остался
+  # зомби). Отдельный контейнер поднимает docker по restart-политике.
+  # Документация celery тоже называет --beat средством для разработки.
+  #
+  # loglevel=info намеренно: beat пишет строку на каждую поставленную задачу,
+  # это десяток строк в сутки — зато видно, что планировщик жив.
+  celery-beat:
+    image: *app_image
+    restart: unless-stopped
+    command: >
+      poetry run celery -A inventify beat
+      --scheduler django
+      --loglevel=info
+    env_file:
+      - .env
+    mem_limit: 140m
     logging: *default-logging
     depends_on:
       db:
