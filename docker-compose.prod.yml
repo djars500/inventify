@@ -53,7 +53,10 @@ services:
       - ./docker/prod/gunicorn.conf.py:/usr/src/app/docker/prod/gunicorn.conf.py:ro
     env_file:
       - .env
-    mem_limit: 380m
+    # По факту занимает ~290 МБ, поэтому запас над наблюдаемым потреблением
+    # держим побольше: упрётся в лимит — ядро убьёт процесс, и это увидят
+    # пользователи. Память взята из освободившегося лимита воркера.
+    mem_limit: 440m
     logging: *default-logging
     depends_on:
       db:
