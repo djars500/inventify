@@ -13,6 +13,17 @@ class CharInFilter(django_filters.BaseInFilter, django_filters.CharFilter):
     pass
 
 
+class NumberInFilter(django_filters.BaseInFilter, django_filters.NumberFilter):
+    """Список чисел через запятую.
+
+    Нужен вместо CharInFilter там, где значение уходит в запрос по id: фронт
+    присылал `manufacturer=NaN` (результат parseInt без проверки), строка
+    доходила до базы и давала 500 «Field 'id' expected a number but got 'NaN'».
+    Теперь такой запрос отсекается валидацией фильтра с кодом 400.
+    """
+    pass
+
+
 class DynamicProductFilterSet(django_filters.FilterSet):
     """Оптимизированный FilterSet для продуктов с динамическими EAV фильтрами.
 
@@ -25,10 +36,10 @@ class DynamicProductFilterSet(django_filters.FilterSet):
     """
     id = django_filters.NumberFilter(field_name='id')
     price = django_filters.RangeFilter(field_name='price__cost')
-    category = django_filters.BaseInFilter(field_name='category__id', lookup_expr='in')
+    category = NumberInFilter(field_name='category__id', lookup_expr='in')
     search = django_filters.CharFilter(method='filter_by_product_or_category_name')
-    modification = django_filters.BaseInFilter(field_name='modification__id', lookup_expr='in')
-    status = CharInFilter(field_name='status', lookup_expr='in')
+    modification = NumberInFilter(field_name='modification__id', lookup_expr='in')
+    status = NumberInFilter(field_name='status', lookup_expr='in')
 
     sort = OrderingFilter(
         fields=(
@@ -100,10 +111,10 @@ class DynamicProductFilterSet(django_filters.FilterSet):
                     filters['year_end'] = django_filters.NumberFilter(
                         method='filter_year_end'
                     )
-                    filters['manufacturer'] = django_filters.BaseInFilter(
+                    filters['manufacturer'] = NumberInFilter(
                         method='filter_manufacturer', lookup_expr='in'
                     )
-                    filters['modelCar'] = django_filters.BaseInFilter(
+                    filters['modelCar'] = NumberInFilter(
                         method='filter_modelCar', lookup_expr='in'
                     )
                 else:

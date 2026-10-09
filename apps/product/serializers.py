@@ -97,7 +97,10 @@ class ProductListSerializerV2(ProductSerializerV2):
 
     @staticmethod
     def get_modelCar(obj: Product):
-        return ModelCarSerializer(obj.eav.modelCar).data
+        # Атрибута может не быть вовсе (чистая база, переименование атрибута) —
+        # тогда django-eav2 бросает AttributeError и весь список товаров падает
+        # с 500. Значение None обрабатывается как раньше.
+        return ModelCarSerializer(getattr(obj.eav, 'modelCar', None)).data
 
 
 class AssignWarehouseSerializer(serializers.Serializer):

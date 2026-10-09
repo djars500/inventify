@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.db.models import JSONField
 from django_json_widget.widgets import JSONEditorWidget
-from djangoql.admin import DjangoQLSearchMixin
+from base.admin import SafeDjangoQLSearchMixin
 
 # Register your models here.
 from apps.stock import models
@@ -19,7 +19,7 @@ class StockTabularInline(admin.TabularInline):
         return queryset.filter(quantity__gt=0)
 
 
-class WarehouseAdmin(DjangoQLSearchMixin, admin.ModelAdmin):
+class WarehouseAdmin(SafeDjangoQLSearchMixin, admin.ModelAdmin):
     list_display = ('id', 'name', 'min_stock_level', 'get_stock')
     search_fields = ('name', 'product',)
     filter_horizontal = ('products_category',)
@@ -32,7 +32,7 @@ class WarehouseAdmin(DjangoQLSearchMixin, admin.ModelAdmin):
 admin.site.register(models.Warehouse, WarehouseAdmin)
 
 
-class StockAdmin(DjangoQLSearchMixin, admin.ModelAdmin):
+class StockAdmin(SafeDjangoQLSearchMixin, admin.ModelAdmin):
     list_display = ('id', 'product', 'product_id', 'warehouse', 'quality', 'quantity')
     search_fields = ('product_id',)
 

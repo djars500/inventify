@@ -8,7 +8,7 @@ from django.shortcuts import redirect, render
 from django.urls import path, reverse
 from django.utils.html import format_html
 from django_json_widget.widgets import JSONEditorWidget
-from djangoql.admin import DjangoQLSearchMixin
+from base.admin import SafeDjangoQLSearchMixin
 from eav.forms import BaseDynamicEntityForm
 
 from apps.car.models import ModelCar, Engine
@@ -115,7 +115,7 @@ def import_photos_from_recar(modeladmin, request, queryset: Product):
         import_pictures_from_recar.delay(obj.id)
         
 
-class ProductAdmin(DjangoQLSearchMixin, admin.ModelAdmin):
+class ProductAdmin(SafeDjangoQLSearchMixin, admin.ModelAdmin):
     actions = [import_photos_from_recar]
     form = ProductAdminForm
     search_fields = ('name',)
@@ -313,7 +313,7 @@ class ProductImageAdmin(admin.ModelAdmin):
     raw_id_fields = ('product',)
 
 
-class PriceAdmin(DjangoQLSearchMixin, admin.ModelAdmin):
+class PriceAdmin(SafeDjangoQLSearchMixin, admin.ModelAdmin):
     raw_id_fields = ('product',)
     list_display = ('cost', 'product')
 

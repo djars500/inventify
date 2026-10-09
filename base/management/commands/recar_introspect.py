@@ -10,8 +10,8 @@ DEFAULT_TYPES = ('GetPartsInput', 'PartSort', 'Part')
 
 
 class Command(BaseCommand):
-    help =(
-        'Печа тает описание типов схемы Recar GraphQL. '
+    help = (
+        'Печатает описание типов схемы Recar GraphQL. '
         'Нужна, чтобы не угадывать имена фильтров и колонок сортировки: '
         'poetry run python manage.py recar_introspect GetPartsInput PartSort'
     )
