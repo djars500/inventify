@@ -1,7 +1,7 @@
 import logging
 
-from django.contrib.auth.models import AnonymousUser
 from django.contrib.auth.password_validation import validate_password
+from django.db.models import Q
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg.utils import swagger_auto_schema
@@ -18,19 +18,22 @@ from apps.order.models import Order
 from apps.order.serializers import OrderSerializer
 from base.enums import StatusEnum
 from inventify.permissions import IsDirector
+from users.services.roles import is_management, is_real_user
 from users import serializers
 from users.actions import CreateUserAction
-from users.enums import RoleEnum
 from users.filters import UserFilter
 from users.models.User import User, Role
 from users.otp.actions import GetStatusUserCodeAction
 from users.otp.enums import SmsStatus
 from users.serializers import (
     ChangePasswordSerializer,
+    PhoneChangeRequestSerializer,
+    PhoneChangeConfirmSerializer,
     ResetPasswordRequestSerializer,
     PasswordResetRequestSerializer,
     PasswordResetConfirmSerializer,
 )
+from users.services.change_phone import PhoneChangeService
 from users.services.reset_password import ResetPasswordService, SmsPasswordResetService
 
 
@@ -43,15 +46,16 @@ class UserViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = User.objects.all().order_by('id')
         user = self.request.user
-        if isinstance(user, AnonymousUser) or not user.is_authenticated:
-            return qs.filter(is_staff=False)
-        is_top = user.is_superuser or user.roles.filter(
-            name__in=[RoleEnum.DIRECTOR.value, RoleEnum.DEPARTMENT_DIRECTOR.value]
-        ).exists()
-        if not is_top:
-            # Обычный сотрудник видит только клиентов, не других сотрудников
-            return qs.filter(is_staff=False)
-        return qs
+        if is_management(user):
+            return qs
+
+        # Обычный сотрудник видит клиентов и себя, но не других сотрудников.
+        # Себя — обязательно: иначе он не может открыть и поправить даже свой
+        # профиль, запрос упирался в 404.
+        if is_real_user(user):
+            return qs.filter(Q(is_staff=False) | Q(pk=user.pk))
+
+        return qs.filter(is_staff=False)
 
     def get_permissions(self):
         """
@@ -59,7 +63,7 @@ class UserViewSet(viewsets.ModelViewSet):
         """
         if self.request.method == 'DELETE':
             return [IsDirector()]
-        if self.action == 'orders':
+        if self.action in ('orders', 'phone_change_request', 'phone_change_confirm'):
             return [IsAuthenticated()]
         return super().get_permissions()
 
@@ -117,6 +121,45 @@ class UserViewSet(viewsets.ModelViewSet):
 
         deleted_count = users.update(status=StatusEnum.DELETED.value)
         return Response({"deleted": deleted_count}, status=status.HTTP_204_NO_CONTENT)
+
+    @swagger_auto_schema(request_body=PhoneChangeRequestSerializer,
+                         operation_id='Смена номера: запрос кода',
+                         tags=['Клиент/Пользователи'],
+                         )
+    def phone_change_request(self, request):
+        """Отправляет код подтверждения на новый номер."""
+        self.check_permissions(request)
+
+        serializer = PhoneChangeRequestSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        new_phone = serializer.validated_data['phone']
+        try:
+            PhoneChangeService.send_code(request.user, new_phone)
+        except Exception as e:
+            logging.exception(e)
+            return Response({'error': 'Не удалось отправить код, попробуйте позже'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'message': f'Код отправлен на {new_phone}'})
+
+    @swagger_auto_schema(request_body=PhoneChangeConfirmSerializer,
+                         operation_id='Смена номера: подтверждение кода',
+                         tags=['Клиент/Пользователи'],
+                         )
+    def phone_change_confirm(self, request):
+        """Подтверждает код и сохраняет новый номер — он же логин."""
+        self.check_permissions(request)
+
+        serializer = PhoneChangeConfirmSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        PhoneChangeService.confirm(
+            request.user,
+            serializer.validated_data['phone'],
+            serializer.validated_data['otp'],
+        )
+        return Response(self.serializer_class(request.user, context={'request': request}).data)
 
     @swagger_auto_schema(request_body=ChangePasswordSerializer,
                          operation_id='Смена пароля',

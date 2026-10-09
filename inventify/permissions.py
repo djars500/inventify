@@ -1,7 +1,7 @@
-from django.contrib.auth.models import AnonymousUser
 from rest_framework.permissions import BasePermission
 
 from users.enums import RoleEnum
+from users.services.roles import has_role, is_real_user
 
 
 class IsManager(BasePermission):
@@ -12,10 +12,7 @@ class IsManager(BasePermission):
     allowed_roles = [RoleEnum.DEPARTMENT_DIRECTOR.value, RoleEnum.DIRECTOR.value]
 
     def has_permission(self, request, view):
-        if request.user.is_superuser:
-            return True
-        user_roles = request.user.roles.values_list('name', flat=True)
-        return any(role in self.allowed_roles for role in user_roles)
+        return has_role(request.user, *self.allowed_roles)
 
 
 class IsDirector(BasePermission):
@@ -26,10 +23,7 @@ class IsDirector(BasePermission):
     allowed_roles = [RoleEnum.DIRECTOR.value]
 
     def has_permission(self, request, view):
-        if request.user.is_superuser:
-            return True
-        user_roles = request.user.roles.values_list('name', flat=True)
-        return any(role in self.allowed_roles for role in user_roles)
+        return has_role(request.user, *self.allowed_roles)
 
 
 class IsStaff(BasePermission):
@@ -40,12 +34,7 @@ class IsStaff(BasePermission):
     allowed_roles = [role.value for role in (RoleEnum)]
 
     def has_permission(self, request, view):
-        if isinstance(request.user, AnonymousUser):
-            return False
-        if request.user.is_superuser:
-            return True
-        user_roles = request.user.roles.values_list('name', flat=True)
-        return any(role in self.allowed_roles for role in user_roles)
+        return has_role(request.user, *self.allowed_roles)
 
 
 class InventifyAPIPermission(BasePermission):
@@ -57,7 +46,7 @@ class InventifyAPIPermission(BasePermission):
         # Проверяем, начинается ли URL с /api/admin
         if request.path.startswith('/api/admin'):
             user = request.user
-            if isinstance(user, AnonymousUser) or not user.is_authenticated:
+            if not is_real_user(user):
                 return False
             # Доступ в админку — только сотрудникам (is_staff) и суперпользователям
             return bool(user.is_superuser or user.is_staff)

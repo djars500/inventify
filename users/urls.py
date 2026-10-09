@@ -26,12 +26,17 @@ user_url = [
     path('<int:pk>/', views.UserViewSet.as_view(
         {
             'delete': 'destroy',
-            'patch': 'update',
+            # partial_update, а не update: PATCH вёл себя как полная замена и
+            # требовал присылать `status` даже при правке одного поля
+            'patch': 'partial_update',
             'get': 'retrieve'
         })),
     path('bulk-delete/', views.UserViewSet.as_view({"delete": "bulk_delete"})),
     path('roles/', views.UserViewSet.as_view({'get': 'roles'})),
     path('change-password/', views.UserViewSet.as_view({'post': 'change_password'})),
+    # Смена номера — он же логин, поэтому в два шага с кодом из SMS
+    path('phone-change/request/', views.UserViewSet.as_view({'post': 'phone_change_request'})),
+    path('phone-change/confirm/', views.UserViewSet.as_view({'post': 'phone_change_confirm'})),
     path('reset-password/', views.UserViewSet.as_view({'post': 'reset_password'})),
     path('password-reset/request/', views.UserViewSet.as_view({'post': 'password_reset_request'})),
     path('password-reset/confirm/', views.UserViewSet.as_view({'post': 'password_reset_confirm'})),
