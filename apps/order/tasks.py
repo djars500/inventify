@@ -1,10 +1,14 @@
+import logging
 import time
 
 from celery import shared_task
 
 from apps.order.actions import ImportOrderAction
+from apps.order.enums import OrderStatusChoices
 from apps.order.models import ImportOrderData, Order
 from base.requests import RecarRequest
+
+logger = logging.getLogger('django')
 
 
 @shared_task
@@ -51,3 +55,40 @@ def import_orders_from_recar():
     create_orders_draft()
     time.sleep(300)
     create_orders()
+
+
+@shared_task
+def sync_order_from_recar(order_id: int):
+    """Перетягивает один заказ из Recar: снапшот и сам заказ с позициями."""
+    order_data = RecarRequest().get_order(order_id)
+    if not order_data:
+        logger.warning('Recar не вернул заказ %s — синхронизация пропущена', order_id)
+        return {'order_id': order_id, 'synced': False}
+
+    ImportOrderData.objects.update_or_create(id=order_id, defaults={'data': order_data})
+    ImportOrderAction().run(order_data)
+    return {'order_id': order_id, 'synced': True}
+
+
+@shared_task
+def sync_unfinished_orders():
+    """Обновляет из Recar заказы, которые ещё в работе.
+
+    Нужна, чтобы заказ завершался по актуальным данным: статус оплаты и состав
+    могли измениться на стороне Recar, а у нас оставались прежними.
+
+    Синхронизируем только заказы, пришедшие из Recar (у них есть снапшот в
+    ImportOrderData). Созданные у нас вручную не трогаем: их id выдаёт наша
+    последовательность и может совпасть с чужим заказом в Recar.
+    """
+    recar_order_ids = ImportOrderData.objects.values_list('id', flat=True)
+    order_ids = list(
+        Order.objects
+        .filter(status=OrderStatusChoices.PROCESSING, id__in=recar_order_ids)
+        .values_list('id', flat=True)
+    )
+
+    for order_id in order_ids:
+        sync_order_from_recar.delay(order_id)
+
+    return {'orders': len(order_ids)}

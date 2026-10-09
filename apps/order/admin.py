@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.db.models import JSONField
 from django_json_widget.widgets import JSONEditorWidget
-from djangoql.admin import DjangoQLSearchMixin
+from base.admin import SafeDjangoQLSearchMixin
 
 from apps.order import models
 from apps.order.actions import ImportOrderAction
@@ -16,7 +16,7 @@ class OrderItemTabularInline(admin.TabularInline):
     readonly_fields = ('product_status',)  # Поле только для чтения
 
 
-class OrderAdmin(DjangoQLSearchMixin, admin.ModelAdmin):
+class OrderAdmin(SafeDjangoQLSearchMixin, admin.ModelAdmin):
     list_display = ('id', 'total', 'payment_type', 'payment_status', 'status', 'created_at', )
     list_filter = ('payment_type', 'payment_status', 'status')
     inlines = [OrderItemTabularInline]

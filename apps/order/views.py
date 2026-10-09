@@ -1,4 +1,5 @@
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils.translation import gettext as _
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_yasg.utils import swagger_auto_schema
@@ -12,6 +13,8 @@ from apps.order import models, serializers
 from apps.order.actions import OrderAction
 from apps.order.enums import OrderStatusChoices, PaymentStatusChoices
 from apps.order.filters import OrderFilter
+from apps.product.models.Price import Price
+from apps.product.models.Product import ProductImage
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -19,6 +22,35 @@ class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = serializers.OrderSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_class = OrderFilter
+
+    def get_serializer_class(self):
+        # В списке отдаём облегчённый заказ: полный ProductSerializer на каждую
+        # позицию при PAGE_SIZE=100 превращал страницу в тысячи запросов
+        if self.action == 'list':
+            return serializers.OrderListSerializer
+        return super().get_serializer_class()
+
+    def get_queryset(self):
+        queryset = super().get_queryset().select_related('warehouse', 'user', 'address')
+
+        if self.action == 'list':
+            # Порядок в prefetch задан явно: цену и фото берём последними
+            # элементами списка, а не отдельным запросом через .last()
+            return queryset.prefetch_related(
+                'goods__product',
+                Prefetch('goods__product__price', queryset=Price.objects.order_by('id')),
+                Prefetch('goods__product__pictures', queryset=ProductImage.objects.order_by('id')),
+            )
+
+        return queryset.prefetch_related(
+            'goods__product__category',
+            'goods__product__code',
+            'goods__product__pictures',
+            'goods__product__price',
+            'goods__product__detail',
+            'goods__product__warehouse',
+            'goods__product__modification',
+        )
 
     @swagger_auto_schema(responses={200: serializers.OrderSerializer},
                          request_body=serializers.OrderSerializer,
@@ -108,5 +140,10 @@ class OrderConfirmView(generics.GenericAPIView):
             instance = self.get_object()
             if instance.payment_status != PaymentStatusChoices.PAID:
                 raise ValidationError(_('Вы не можете завершить заказ, который не оплачен'))
-            order = OrderAction().confirm(instance)
-        return Response(self.serializer_class(order).data)
+            order, write_off_skipped = OrderAction().confirm(instance)
+
+        data = self.serializer_class(order).data
+        # Товары, которые уже были списаны (например проданы в Recar), завершению
+        # заказа больше не мешают — но о них сообщаем, чтобы это не было тихо
+        data['write_off_skipped'] = write_off_skipped
+        return Response(data)

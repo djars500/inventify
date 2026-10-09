@@ -59,6 +59,13 @@ app.conf.beat_schedule = {
         'schedule': crontab(hour=5, minute=0),
     },
 
+    # Заказы в работе могли измениться в Recar (оплата, состав) — обновляем,
+    # чтобы завершались по актуальным данным. После импорта новых заказов.
+    'Синхронизация незавершённых заказов': {
+        'task': 'apps.order.tasks.sync_unfinished_orders',
+        'schedule': crontab(hour=2, minute=40),
+    },
+
     'Очистка логов запросов в Recar': {
         'task': 'base.tasks.clean_recar_request_logs',
         'schedule': crontab(hour=3, minute=15),
