@@ -2,13 +2,15 @@ from unittest import mock
 
 from django.core import mail
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from handbook.models import City, Country
 from users.enums import RoleEnum
 from users.models.User import User, Role
 from users.otp.actions import CreateUserCodeAction
+from users.otp.enums import SmsStatus
+from users.otp.requests import SmsRequest
 from users.otp.models import UserCode
 from users.serializers import PHONE_TAKEN_MESSAGE
 from users.services.reset_password import (
@@ -224,6 +226,69 @@ class PhoneChangeTest(TestCase):
         )
 
         self.assertIn(response.status_code, (401, 403))
+
+
+class OtpChannelTest(TestCase):
+    """Канал доставки кода: SMS или WhatsApp с откатом на SMS.
+
+    WhatsApp дешевле примерно в десять раз, но есть не у всех — поэтому
+    smsc отправляет резервную SMS сам, по тексту из mes2 и флагу fl[5].
+    """
+
+    @override_settings(OTP_CHANNEL='sms', OTP_SMSC_LOGIN='login', OTP_SMSC_PASSWORD='psw')
+    def test_sms_channel_sends_plain_message(self):
+        params = SmsRequest.build_params('+77770000601', 1234)
+
+        self.assertEqual(params['phones'], '77770000601')
+        self.assertEqual(params['mes'], 'Kaynaravto Ваш код: 1234')
+        self.assertNotIn('bot', params)
+        self.assertNotIn('mes2', params)
+
+    @override_settings(OTP_CHANNEL='whatsapp', OTP_WHATSAPP_BOT='+77001234567',
+                       OTP_WHATSAPP_FALLBACK_SMS=1)
+    def test_whatsapp_channel_adds_bot_and_sms_fallback(self):
+        params = SmsRequest.build_params('+77770000602', 1234)
+
+        self.assertEqual(params['bot'], 'wa:77001234567')
+        # Текст для резервной SMS совпадает с основным
+        self.assertEqual(params['mes2'], params['mes'])
+        self.assertEqual(params['fl[5]'], 1)
+
+    @override_settings(OTP_CHANNEL='whatsapp', OTP_WHATSAPP_BOT='+77001234567',
+                       OTP_WHATSAPP_FALLBACK_SMS=0)
+    def test_fallback_can_be_disabled(self):
+        params = SmsRequest.build_params('+77770000603', 1234)
+
+        self.assertEqual(params['bot'], 'wa:77001234567')
+        self.assertNotIn('mes2', params)
+        self.assertNotIn('fl[5]', params)
+
+    @override_settings(OTP_CHANNEL='whatsapp', OTP_WHATSAPP_BOT='')
+    def test_whatsapp_without_bot_falls_back_to_sms(self):
+        """Канал включили, номер бота не задали — код всё равно должен уйти."""
+        params = SmsRequest.build_params('+77770000604', 1234)
+
+        self.assertNotIn('bot', params)
+        self.assertEqual(params['mes'], 'Kaynaravto Ваш код: 1234')
+
+    @override_settings(OTP_CHANNEL='whatsapp', OTP_WHATSAPP_BOT='+77001234567')
+    @mock.patch('users.otp.requests.requests.post')
+    def test_send_returns_success_on_ok(self, post):
+        post.return_value = mock.Mock(content='OK - 1 SMS, balance: 100'.encode())
+
+        result = SmsRequest.send_sms('+77770000605', 1234)
+
+        self.assertEqual(result['status'], SmsStatus.SUCCESS)
+        self.assertEqual(post.call_args.kwargs['params']['bot'], 'wa:77001234567')
+
+    @override_settings(OTP_CHANNEL='sms')
+    @mock.patch('users.otp.requests.requests.post')
+    def test_send_returns_error_status_on_rejection(self, post):
+        post.return_value = mock.Mock(content='ERROR = 6 (invalid phone)'.encode())
+
+        result = SmsRequest.send_sms('+77770000606', 1234)
+
+        self.assertEqual(result['status'], SmsStatus.NOT_CREATED)
 
 
 class PhoneNormalizationTest(TestCase):

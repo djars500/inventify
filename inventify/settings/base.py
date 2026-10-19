@@ -303,6 +303,20 @@ LOGGING = {
     },
 }
 
+# Отправка кодов подтверждения через smsc.kz
+# Имена sms_login/sms_psw оставлены как в окружении на проде
+OTP_SMSC_LOGIN = os.environ.get('sms_login')
+OTP_SMSC_PASSWORD = os.environ.get('sms_psw')
+
+# Канал доставки кода: 'sms' или 'whatsapp'. WhatsApp дешевле примерно в десять
+# раз (1,7 тг против 17-21 тг), но требует подключённого номера бота.
+OTP_CHANNEL = os.environ.get('OTP_CHANNEL', 'sms')
+# Номер WhatsApp-бота, который выдаёт smsc после регистрации в Meta
+OTP_WHATSAPP_BOT = os.environ.get('OTP_WHATSAPP_BOT', '')
+# Каскад: если сообщение в WhatsApp не доставлено, smsc сам отправит SMS.
+# Без этого клиент без WhatsApp просто не получит код и не сможет войти.
+OTP_WHATSAPP_FALLBACK_SMS = int(os.environ.get('OTP_WHATSAPP_FALLBACK_SMS', 1))
+
 # Лог запросов в Recar (base.models.RecarRequestLog)
 RECAR_REQUEST_LOG_ENABLED = int(os.environ.get('RECAR_REQUEST_LOG_ENABLED', 1))
 # Ответы больше лимита пишутся усечёнными: FetchParts на 200 000 записей
